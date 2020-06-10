@@ -1,22 +1,16 @@
-# noinspection PyPep8Naming
-class PVM:
-    """
-    Python virtual machine
-    -- bytecode interpreter --
-    written in Python.
-    """
+
+
+class VMError(Exception):
+    pass
+
+
+class PyVM:
     def __init__(self):
-        self.stack = []
+        self.frames = []  # Call stack of frames
+        self.frame = None  # Current frame
+        self.return_val = None
+        self.last_exception = None
 
-    def LOAD_VALUE(self, number):
-        self.stack.append(number)
 
-    def PRINT_ANSWER(self):
-        answer = self.stack.pop()
-        print(answer)
-
-    def ADD_TWO_VALUES(self):
-        fst_val = self.stack.pop()
-        snd_val = self.stack.pop()
-        sum_val = fst_val + snd_val
-        self.stack.append(sum_val)
+if __name__ == "__main__":
+    raise NotImplementedError
