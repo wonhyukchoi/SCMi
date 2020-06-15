@@ -39,7 +39,7 @@ parseQuoted = do
 -- Exercises
 
 readTest :: String -> String
-readTest input = case parse parseNumber "" input of
+readTest input = case parse parseExpr "" input of
   Left err -> "Failure! " ++ "\n" ++ show err
   Right val -> "Sucess! " ++ show val
 

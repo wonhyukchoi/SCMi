@@ -16,12 +16,16 @@ main :: IO()
 main = do
   getArgs >>= print . eval . readExpr . head
 
+mainFxn :: String -> String
+mainFxn = show . eval . readExpr
+
 readExpr :: String -> LispVal
 readExpr input = case parse parseExpr "" input of
   Left err -> String $ "Failure! " ++ "\n" ++ show err
   Right val -> val
 
 eval :: LispVal -> LispVal
+eval val@(Atom _) = val
 eval val@(String _) = val
 eval val@(Bool _) = val
 eval val@(Number _) = val
@@ -29,7 +33,12 @@ eval (List [Atom "quote", val]) = val
 eval (List (Atom func: args)) = apply func $ map eval args
 
 apply :: String -> [LispVal] -> LispVal
+apply "boolean?" (arg:_) = Bool $ isBool arg
 apply func args = maybe (Bool False) ($ args) $ lookup func primitives
+
+isBool :: LispVal -> Bool
+isBool (Bool _) = True
+isBool _ = False
 
 primitives :: [(String, [LispVal] -> LispVal)]
 primitives = [("+", numericBinop (+)),
@@ -37,7 +46,25 @@ primitives = [("+", numericBinop (+)),
               ("*", numericBinop (*)),
               ("/", numericBinop div),
               ("quotient", numericBinop quot),
-              ("remainder", numericBinop rem)]
+              ("remainder", numericBinop rem),
+              ("symbol?", unaryOp symbolp),
+              ("number?", unaryOp numberp),
+              ("symbol->string", unaryOp sym2str),
+              ("string->symbol", unaryOp str2sym)]
+
+unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
+unaryOp f [v] = f v
+
+symbolp, numberp, sym2str, str2sym :: LispVal -> LispVal
+symbolp (Atom _) = Bool True
+symbolp _        = Bool False
+numberp (Number _) = Bool True
+numberp _          = Bool False
+sym2str (Atom a) = String a
+sym2str _        = String ""
+str2sym (String s) = Atom s
+str2sym _          = Atom ""
+
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
 numericBinop op params = Number $ foldl1 op $ map unpackNum params
@@ -82,7 +109,11 @@ data LispVal = Atom String |
                Character Char |
                Float Double |
                Ratio Rational |
-               Complex (Complex Double)
+               Complex (Complex Double) deriving (Show)
+
+-- instance Show LispVal where
+--  show = showVal
+
 {-
 Ch3
 -}
@@ -104,9 +135,6 @@ showVal (DottedList listPart elemPart) = "("
 
 listShower :: [LispVal] -> String
 listShower = unwords . (map showVal)
-
-instance Show LispVal where
-  show = showVal
 
 {-
 Imports from ch2
