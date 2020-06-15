@@ -12,13 +12,113 @@ import Numeric(readOct, readHex, readFloat)
 import Data.Ratio((%), Rational)
 import Data.Complex(Complex, Complex((:+)))
 
--- https://en.wikibooks.org/wiki/Write_Yourself_a_Scheme_in_48_Hours/Parsing
-
+main :: IO()
 main = do
-  (expr:_) <- getArgs
-  putStrLn $ readExpr expr
+  getArgs >>= print . eval . readExpr . head
 
--- Recursive Parsers
+readExpr :: String -> LispVal
+readExpr input = case parse parseExpr "" input of
+  Left err -> String $ "Failure! " ++ "\n" ++ show err
+  Right val -> val
+
+eval :: LispVal -> LispVal
+eval val@(String _) = val
+eval val@(Bool _) = val
+eval val@(Number _) = val
+eval (List [Atom "quote", val]) = val
+eval (List (Atom func: args)) = apply func $ map eval args
+
+apply :: String -> [LispVal] -> LispVal
+apply func args = maybe (Bool False) ($ args) $ lookup func primitives
+
+primitives :: [(String, [LispVal] -> LispVal)]
+primitives = [("+", numericBinop (+)),
+              ("-", numericBinop (-)),
+              ("*", numericBinop (*)),
+              ("/", numericBinop div),
+              ("quotient", numericBinop quot),
+              ("remainder", numericBinop rem)]
+
+numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
+numericBinop op params = Number $ foldl1 op $ map unpackNum params
+
+unpackNum :: LispVal -> Integer
+unpackNum (Number n) = n
+unpackNum (String s) = let parsed = reads s :: [(Integer, String)] in
+                         if null parsed then 0
+                         else fst $ parsed !! 0
+unpackNum (List [l]) = unpackNum l
+unpackNum _ = 0
+
+
+-- oldMain = do
+--   (expr:_) <- getArgs
+--   putStrLn $ readExpr expr
+
+parseTest :: Parser LispVal
+parseTest = parseNumber
+
+parseExpr :: Parser LispVal
+parseExpr = parseAtom
+            <|> parseString
+            <|> try parseComplex
+            <|> try parseFloat
+            <|> try parseRatio
+            <|> parseNumber
+            <|> parseBool
+            <|> parseChar
+            <|> parseQuoted
+            <|> do char '('
+                   x <- try parseList <|> try parseDottedList
+                   char ')'
+                   return x
+
+data LispVal = Atom String |
+               List [LispVal] |
+               DottedList [LispVal] LispVal |
+               Number Integer |
+               String String |
+               Bool Bool |
+               Character Char |
+               Float Double |
+               Ratio Rational |
+               Complex (Complex Double)
+{-
+Ch3
+-}
+
+showVal :: LispVal -> String
+showVal (Atom contents) = contents
+showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Number value) = show value
+showVal (Float value) = show value
+showVal (Ratio value) = show value
+showVal (Character value) = show value
+showVal (Bool True) = "#t"
+showVal (Bool False) = "#f"
+showVal (List contents) = "(" ++ listShower contents ++ ")"
+showVal (DottedList listPart elemPart) = "("
+                                         ++ listShower listPart
+                                         ++ "." ++ showVal elemPart
+                                         ++ ")"
+
+listShower :: [LispVal] -> String
+listShower = unwords . (map showVal)
+
+instance Show LispVal where
+  show = showVal
+
+{-
+Imports from ch2
+-}
+
+parseNumber :: Parser LispVal
+parseNumber = parseDecimal1
+              <|> parseDecimal2
+              <|> parseHex
+              <|> parseOct
+              <|> parseBin
+
 parseList :: Parser LispVal
 parseList = liftM List $ sepBy parseExpr spaces
 
@@ -33,69 +133,6 @@ parseQuoted = do
   char '\''
   x <- parseExpr
   return $ List [Atom "quote", x]
-
--- Return values
-
--- Exercises
-
-readTest :: String -> String
-readTest input = case parse parseNumber "" input of
-  Left err -> "Failure! " ++ "\n" ++ show err
-  Right val -> "Sucess! " ++ show val
-
-parseNumberEx1a :: Parser LispVal
-parseNumberEx1a = do
-  nums <- many1(digit)
-  let result = Number $ read nums
-  return result
-
-parseNumberEx1b :: Parser LispVal
-parseNumberEx1b =
-  many1(digit) >>= return . Number . read
-
-escapedChars :: Parser Char
-escapedChars = do
-  char '\\'
-  x <- oneOf("\\\"")
-  return x
-
-parseStringEx2 :: Parser LispVal
-parseStringEx2 = do
-  char '"'
-  x <- many $ escapedChars <|> noneOf "\"\\"
-  char '"'
-  return $ String x
-
-escapedChars3 :: Parser Char
-escapedChars3 = do
-  char '\\'
-  x <- oneOf("\\\"nrt")
-  return $ case x of
-    '\\' -> x
-    '"' -> x
-    't' -> '\t'
-    'n' -> '\n'
-    'r' -> '\r'
-
-parseStringEx3 :: Parser LispVal
-parseStringEx3 = do
-  char '"'
-  x <- many $ escapedChars3 <|> noneOf "\""
-  char '"'
-  return $ String x
-
-parseNumberEx4Bases :: Parser LispVal
-parseNumberEx4Bases = do
-  char '#'
-  base <- oneOf "ox"
-  val <- many1(digit <|> letter)
-  return $ case base of
-    'o' -> Number . fst . head $ readOct val
-    'x' -> Number . fst . head $ readHex val
-
-parseNumberEx4 :: Parser LispVal
-parseNumberEx4 = parseDecimal1
-                 <|> parseNumberEx4Bases
 
 parseChar :: Parser LispVal
 parseChar = do
@@ -133,14 +170,6 @@ parseComplex = do
   char 'i'
   let complexVal = read realPart :+ read imagPart
   return $ Complex complexVal
-
--- Content
-
-readExpr :: String -> String
-readExpr input = case parse parseExpr msg input of
-  Left err -> input ++ msg
-  Right val -> "Found value: " ++ show val
-  where msg = " cannot be parsed"
 
 parseDecimal1 :: Parser LispVal
 parseDecimal1 = liftM (Number . read) $ many1 digit
@@ -203,55 +232,8 @@ parseBool = do
   char '#'
   (char 't' >> return (Bool True)) <|> (char 'f' >> return (Bool False))
 
-parseExpr :: Parser LispVal
-parseExpr = parseAtom
-            <|> parseString
-            <|> try parseComplex
-            <|> parseFloat
-            <|> try parseRatio
-            <|> parseNumber
-            <|> parseBool
-            <|> parseChar
-            <|> parseQuoted
-            <|> do char '('
-                   x <- try parseList <|> try parseDottedList
-                   char ')'
-                   return x
-
-parseNumber :: Parser LispVal
-parseNumber = parseDecimal1
-              <|> parseDecimal2
-              <|> parseHex
-              <|> parseOct
-              <|> parseBin
-
-data LispVal = Atom String |
-               List [LispVal] |
-               DottedList [LispVal] LispVal |
-               Number Integer |
-               String String |
-               Bool Bool |
-               Character Char |
-               Float Double |
-               Ratio Rational |
-               Complex (Complex Double)  deriving (Show)
-
--- Whitespace
-
 spaces :: Parser ()
 spaces = skipMany1 space
 
-readExpr2 :: String -> String
-readExpr2 input = case parse (spaces >> symbol) " BAD" input of
-  Left err -> "error!" ++ show err
-  Right val -> "Found value" ++ [val]
-
--- Writing a simple parser
-
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
-
-readExpr1 :: String -> String
-readExpr1 input = case parse symbol "ERROR!!" input of
-  Left err -> "No match: " ++ show err
-  Right val -> "Found value"
