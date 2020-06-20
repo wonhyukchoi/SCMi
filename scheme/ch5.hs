@@ -103,14 +103,41 @@ primitives = [("+", numericBinop (+)),
               ("string>=?", strBoolBinop (>=))
               ]
 
-numBoolBinop :: [LispVal] -> ThrowsError LispVal
-numBoolBinop _ = Right $ Number 5
+numBoolBinop :: (Integer -> Integer -> Bool) ->
+                [LispVal] -> ThrowsError LispVal
+numBoolBinop = boolBinop unpackNum
 
-boolBoolBinop :: [LispVal] -> ThrowsError LispVal
-boolBoolBinop _ = Right $ Number 5
+boolBoolBinop :: (Bool -> Bool -> Bool) ->
+                 [LispVal] -> ThrowsError LispVal
+boolBoolBinop = boolBinop unpackBool
 
-strBoolBinop :: [LispVal] -> ThrowsError LispVal
-strBoolBinop _ = Right $ Number 5
+strBoolBinop :: (String -> String -> Bool) ->
+                [LispVal] -> ThrowsError LispVal
+strBoolBinop = boolBinop unpackStr
+
+boolBinop :: (Eq a) => (LispVal -> ThrowsError a) ->
+                       (a->a->Bool) ->
+                       [LispVal] -> ThrowsError LispVal
+boolBinop unpacker funct params = if length params /= 2
+                                  then E.throwError $ NumArgs 2 params
+                                  else do
+                                    lhs <- unpacker $ params !! 0
+                                    rhs <- unpacker $ params !! 1
+                                    return $ Bool $ funct lhs rhs
+
+unpackBool :: LispVal -> ThrowsError Bool
+unpackBool (Bool n) = return n
+unpackBool (String s) = let parsed = reads s :: [(Bool, String)] in
+                         if null parsed
+                           then E.throwError $ TypeMisMatch "boolean" $ String s
+                           else return $ fst $ parsed !! 0
+unpackBool notBool = E.throwError $ TypeMisMatch "boolean" notBool
+
+unpackStr :: LispVal -> ThrowsError String
+unpackStr (String s) = return s
+unpackStr (Number s) = return $ show s
+unpackStr (Bool s)   = return $ show s
+unpackStr notStr     = E.throwError $  TypeMisMatch "string" notStr
 
 unaryOp :: (LispVal -> LispVal) -> [LispVal] -> ThrowsError LispVal
 unaryOp f [v] = return $ f v
@@ -140,11 +167,6 @@ unpackNum (String s) = let parsed = reads s :: [(Integer, String)] in
                            else return $ fst $ parsed !! 0
 unpackNum (List [l]) = unpackNum l
 unpackNum notNum = E.throwError $ TypeMisMatch "number" notNum
-
-
--- oldMain = do
---   (expr:_) <- getArgs
---   putStrLn $ readExpr expr
 
 parseTest :: Parser LispVal
 parseTest = parseNumber
