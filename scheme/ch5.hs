@@ -64,6 +64,11 @@ eval val@(String _) = return val
 eval val@(Bool _) = return val
 eval val@(Number _) = return val
 eval (List [Atom "quote", val]) = return val
+eval (List [Atom "if", condition, ifTrue, ifFalse]) = do
+  result <- eval condition
+  case result of
+    Bool True -> eval ifTrue
+    otherwise -> eval ifFalse
 eval (List (Atom func: args)) = mapM eval args >>= apply func
 eval badForm = E.throwError $ BadSpecialForm "bad form" badForm
 
@@ -91,6 +96,7 @@ primitives = [("+", numericBinop (+)),
               ---Chapter 5
               ("=", numBoolBinop (==)),
               ("<", numBoolBinop (<)),
+              (">", numBoolBinop (>)),
               ("/=", numBoolBinop (/=)),
               (">=", numBoolBinop (>=)),
               ("<=", numBoolBinop (<=)),
