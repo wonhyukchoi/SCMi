@@ -87,7 +87,30 @@ primitives = [("+", numericBinop (+)),
               ("symbol?", unaryOp symbolp),
               ("number?", unaryOp numberp),
               ("symbol->string", unaryOp sym2str),
-              ("string->symbol", unaryOp str2sym)]
+              ("string->symbol", unaryOp str2sym),
+              ---Chapter 5
+              ("=", numBoolBinop (==)),
+              ("<", numBoolBinop (<)),
+              ("/=", numBoolBinop (/=)),
+              (">=", numBoolBinop (>=)),
+              ("<=", numBoolBinop (<=)),
+              ("&&", boolBoolBinop (&&)),
+              ("||", boolBoolBinop (||)),
+              ("string=?", strBoolBinop (==)),
+              ("string<?", strBoolBinop (<)),
+              ("string>?", strBoolBinop (>)),
+              ("string<=?", strBoolBinop (<=)),
+              ("string>=?", strBoolBinop (>=))
+              ]
+
+numBoolBinop :: [LispVal] -> ThrowsError LispVal
+numBoolBinop _ = Right $ Number 5
+
+boolBoolBinop :: [LispVal] -> ThrowsError LispVal
+boolBoolBinop _ = Right $ Number 5
+
+strBoolBinop :: [LispVal] -> ThrowsError LispVal
+strBoolBinop _ = Right $ Number 5
 
 unaryOp :: (LispVal -> LispVal) -> [LispVal] -> ThrowsError LispVal
 unaryOp f [v] = return $ f v
