@@ -1,3 +1,5 @@
+{-# LANGUAGE ExistentialQuantification #-}
+
 import Text.ParserCombinators.Parsec(oneOf, Parser, parse,
                                      skipMany1, space,
                                      many, noneOf, char,
@@ -20,6 +22,67 @@ main = do
       evaled  = fmap show $ readExpr toParse >>= eval
       result  = extractValue $ trapError evaled
   putStrLn result
+
+data Unpacker = forall a. Eq a => AnyUnpacker (LispVal -> ThrowsError a)
+
+equal :: [LispVal] -> ThrowsError LispVal
+equal [arg1, arg2] = do
+  primitiveList <- mapM (unpackEq arg1 arg2)
+                        [AnyUnpacker unpackNum, AnyUnpacker unpackStr,
+                         AnyUnpacker unpackBool]
+  primitiveTrue <- return $ or primitiveList
+  eqvTrue <- eqv [arg1, arg2]
+  return $ Bool $ (primitiveTrue || let (Bool x) = eqvTrue in x)
+equal badArgList = E.throwError $ NumArgs 2 badArgList
+
+foo = [AnyUnpacker unpackNum, AnyUnpacker unpackStr,
+                           AnyUnpacker unpackBool]
+bar = unpackEq (Bool True) (Bool False)
+
+unpackEq :: LispVal -> LispVal -> Unpacker -> ThrowsError Bool
+unpackEq arg1 arg2 (AnyUnpacker unpackFxn) = do
+  arg1UnPacked <- unpackFxn arg1
+  arg2UnPacked <- unpackFxn arg2
+  return $ arg1UnPacked == arg2UnPacked
+  `E.catchError` (const $ return False)
+
+
+car :: [LispVal] -> ThrowsError LispVal
+car [List (x:_)]           = return x
+car [DottedList (x:_) _]   = return x
+car [badArg]               = E.throwError $ TypeMisMatch "pair" badArg
+car badArg                 = E.throwError $ NumArgs 1 badArg
+
+cdr :: [LispVal] -> ThrowsError LispVal
+cdr [List (_:xs)]          = return $ List xs
+cdr [DottedList [_] x]     = return x
+cdr [DottedList (_:xs) x]  = return $ DottedList xs x
+cdr [badArg]               = E.throwError $ TypeMisMatch "pair" badArg
+cdr badArg                 = E.throwError $ NumArgs 1 badArg
+
+cons :: [LispVal] -> ThrowsError LispVal
+cons [x1, List []]            = return $ List [x1]
+cons [x, List xs]             = return $ List $ x:xs
+cons [x, DottedList xs xlast] = return $ DottedList (x:xs) xlast
+cons [x1, x2]                 = return $ DottedList [x1] x2
+cons badArgList               = E.throwError $ NumArgs 2 badArgList
+
+eqv :: [LispVal] -> ThrowsError LispVal
+eqv [(Bool arg1), (Bool arg2)]             = return $ Bool $ arg1 == arg2
+eqv [(Number arg1), (Number arg2)]         = return $ Bool $ arg1 == arg2
+eqv [(String arg1), (String arg2)]         = return $ Bool $ arg1 == arg2
+eqv [(Atom arg1), (Atom arg2)]             = return $ Bool $ arg1 == arg2
+eqv [(DottedList xs x), (DottedList ys y)] = eqv [List $ x:xs, List $ y:ys]
+eqv [(List arg1), (List arg2)]             =
+  let lenEq = (length arg1) == (length arg2)
+      elemEq = all eqvPair $ zip arg1 arg2
+      eqvPair (x1, x2) = case eqv [x1, x2] of
+        Left err -> False
+        Right (Bool val) -> val
+  in return $ Bool $ lenEq && elemEq
+eqv [_ , _]                                = return $ Bool False
+eqv badArgList                             = E.throwError $ NumArgs 2 badArgList
+
 
 data LispError = NumArgs Integer [LispVal]
                  | TypeMisMatch String LispVal
@@ -93,7 +156,7 @@ primitives = [("+", numericBinop (+)),
               ("number?", unaryOp numberp),
               ("symbol->string", unaryOp sym2str),
               ("string->symbol", unaryOp str2sym),
-              ---Chapter 5
+              --- Chapter 5
               ("=", numBoolBinop (==)),
               ("<", numBoolBinop (<)),
               (">", numBoolBinop (>)),
@@ -106,7 +169,14 @@ primitives = [("+", numericBinop (+)),
               ("string<?", strBoolBinop (<)),
               ("string>?", strBoolBinop (>)),
               ("string<=?", strBoolBinop (<=)),
-              ("string>=?", strBoolBinop (>=))
+              ("string>=?", strBoolBinop (>=)),
+              -- Chapter 5 con.
+              ("car", car),
+              ("cdr", cdr),
+              ("cons", cons),
+              ("eq?", eqv),
+              ("eqv?", eqv),
+              ("equal?", equal)
               ]
 
 numBoolBinop :: (Integer -> Integer -> Bool) ->
