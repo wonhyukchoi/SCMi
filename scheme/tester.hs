@@ -1,5 +1,6 @@
 import Control.Monad(mapM)
 
+
 monadTest :: (Num a) => a -> [a]
 {- Following two signatures are equivalent -}
 -- monadTest val = return val
