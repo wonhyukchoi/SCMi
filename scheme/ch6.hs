@@ -14,7 +14,8 @@ import Numeric(readOct, readHex, readFloat)
 import Data.Ratio((%), Rational)
 import Data.Complex(Complex, Complex((:+)))
 import qualified Control.Monad.Except as E
-import System.IO as IO
+import qualified System.IO as IO
+import qualified Data.IORef as IORef
 
 main :: IO()
 main = do

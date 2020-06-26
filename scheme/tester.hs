@@ -1,5 +1,26 @@
-import Control.Monad(mapM)
+import Control.Monad
+import Data.IORef
+import System.IO
+import Control.Monad.IO.Class
 
+addBinding (var, value) = do
+  ref <- newIORef value
+  return (var, ref)
+
+sampleBindings = zip ['a'..'e'] [1..5]
+
+-- sampleEnv :: (Char, IORef Integer)
+sampleEnv      = do
+  refVal <- newIORef 10
+  return ('f', refVal)
+
+type Env = IORef [(String, IORef Integer)]
+
+bindVars :: Env -> [(String, Integer)] -> IO Env
+bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
+     where extendEnv bindings env = fmap (++ env) (mapM addBinding bindings)
+           addBinding (var, value) = do ref <- newIORef value
+                                        return (var, ref)
 
 monadTest :: (Num a) => a -> [a]
 {- Following two signatures are equivalent -}
