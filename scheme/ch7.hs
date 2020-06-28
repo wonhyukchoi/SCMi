@@ -25,7 +25,10 @@ main = do
   if argNum == 0 then runREPL
   else if argNum == 1 then runExpr $ args !! 0
   else putStrLn "Error!"
-    
+
+
+
+{-Below resides Ch7.-}    
 
 type Env = IORef.IORef [(String, IORef.IORef LispVal)]
 
@@ -446,6 +449,7 @@ data LispVal = Atom String |
                Float Double |
                Ratio Rational |
                Complex (Complex Double) deriving (Show)
+
 
 -- instance Show LispVal where
 --  show = showVal

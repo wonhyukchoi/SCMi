@@ -3,6 +3,13 @@ import Data.IORef
 import System.IO
 import Control.Monad.IO.Class
 
+data Funs = FunA ([Int] -> Int) 
+           |FunB {a :: [Int], b :: [Int]}
+
+mshows :: Funs -> String
+mshows (FunA foo) = show "foo"
+mshows (FunB alpha beta) = show alpha ++ " : " ++ show beta
+
 addBinding (var, value) = do
   ref <- newIORef value
   return (var, ref)
