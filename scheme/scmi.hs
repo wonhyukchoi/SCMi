@@ -21,11 +21,67 @@ import Control.Monad.IO.Class(liftIO)
 main :: IO()
 main = do
   args <- getArgs
-  let argNum = length args
-  if argNum == 0 then runREPL
-  else if argNum == 1 then runExpr $ args !! 0
-  else putStrLn "Error!"
-    
+  if null args then runREPL else (runFile args)
+
+runExpr :: String -> IO()
+runExpr expr = primitiveBindings >>= flip evalAndPrint expr
+
+runFile :: [String] -> IO()
+runFile args = do
+  let fileName = args !! 0
+  env <- primitiveBindings 
+  runIOThrows $ fmap show $ eval env $ List [Atom "load", String fileName]
+  -- (runIOThrows $ fmap show $ eval env (List [Atom "load", String fileName]))  >>=
+  --   IO.hPutStrLn IO.stderr
+  putStrLn $ "Ok, modules loaded: " ++ fileName
+  until_ (readPrompt "$~: ") (evalAndPrint env) (== ":q")
+
+
+runREPL :: IO()
+runREPL = do
+  putStrLn "Booting whc Scheme Interpreter... "
+  putStrLn "Hello, welcome! "
+  baseEnv <- primitiveBindings
+  until_ (readPrompt "$~: ") (evalAndPrint baseEnv) (== ":q")
+
+applyProc :: [LispVal] -> IOThrowsError LispVal
+applyProc [func, List args] = apply func args
+applyProc (func : args)     = apply func args
+
+makePort :: IO.IOMode -> [LispVal] -> IOThrowsError LispVal
+makePort mode [String fileName] =
+  fmap Port $ liftIO $ IO.openFile fileName mode
+
+closePort :: [LispVal] -> IOThrowsError LispVal
+closePort [Port handle] = liftIO $ IO.hClose handle >> 
+                          (return $ Bool True)
+closePort _             = (return $ Bool False)
+
+readProc :: [LispVal] -> IOThrowsError LispVal
+readProc []            = readProc [Port IO.stdin]
+readProc [Port handle] = (liftIO $ IO.hGetLine handle) >>= 
+                         liftThrows . readExpr
+
+writeProc :: [LispVal] -> IOThrowsError LispVal
+writeProc [obj]              = writeProc [obj, Port IO.stdout]
+writeProc [obj, Port handle] = liftIO $ IO.hPrint handle obj >> 
+                               (return $ Bool True)
+
+readContents :: [LispVal] -> IOThrowsError LispVal
+readContents [String fileName] = 
+  fmap String $ liftIO $ IO.readFile fileName
+
+
+load :: String -> IOThrowsError [LispVal]
+load fileName = (liftIO $ IO.readFile fileName) >>= 
+                liftThrows . readExprList
+
+readAll :: [LispVal] -> IOThrowsError LispVal
+readAll [String fileName] = fmap List $ load fileName
+
+
+{-Below contains Ch.1~8 and edits here and there-}
+
 type Env = IORef.IORef [(String, IORef.IORef LispVal)]
 
 nullEnv :: IO Env
@@ -105,19 +161,10 @@ until_ prompt action isQuit = do
 
 
 primitiveBindings :: IO Env
-primitiveBindings = nullEnv >>= flip bindVars (map primFuncMaker primitives)
-  where primFuncMaker (name, fxn) = (name, PrimitiveFunc fxn)
-
-runExpr :: String -> IO()
-runExpr expr = primitiveBindings >>= flip evalAndPrint expr
-
-runREPL :: IO()
-runREPL = do
-  putStrLn "Booting whc Scheme Interpreter... "
-  putStrLn "Hello, welcome! "
-  baseEnv <- primitiveBindings
-  until_ (readPrompt "$~: ") (evalAndPrint baseEnv) (== ":q")
-
+primitiveBindings = nullEnv >>= flip bindVars (primFxns ++ ioFxns)
+  where fxnMaker fxnType (name, fxn) = (name, fxnType fxn)
+        primFxns                     = map (fxnMaker PrimitiveFunc) primitives
+        ioFxns                       = map (fxnMaker IOFunc) ioPrimitives
 
 stringLen :: [LispVal] -> ThrowsError LispVal
 stringLen [(String s)] = return $ Number $ fromIntegral $ length s
@@ -174,16 +221,6 @@ caseHelper env caseVal (List [List conds, value]) = do
   let isCond     = any (\(Bool x) -> x) isEq
   return $ Bool isCond
 caseHelper _ badForm _ = E.throwError $ BadSpecialForm "Syntax Error" badForm
-
-condz  = [Number 1,Number 2,Number 3,Number 4,Number 5]
-valuez = List [Atom "quote",Atom "greater"]
-
-tfWrapper = do
-  base <- nullEnv
-  runIOThrows $ fmap show $ tempFun base
-
-tempFun :: Env -> IOThrowsError [LispVal]
-tempFun env = mapM (eval env) condz
 
 equal :: [LispVal] -> ThrowsError LispVal
 equal [List xAll@(x:xs), List yAll@(y:ys)] = do
@@ -285,10 +322,16 @@ extractValue (Right val) = val
 
 {-Ch3 below-}
 
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser input = case parse parser "" input of
+  Left err  -> E.throwError $ Parser err 
+  Right val -> return val
+
 readExpr :: String -> ThrowsError LispVal
-readExpr input = case parse parseExpr "" input of
-  Left err -> E.throwError $ Parser err
-  Right val -> Right val
+readExpr = readOrThrow parseExpr
+
+readExprList :: String -> ThrowsError [LispVal]
+readExprList = readOrThrow (endBy parseExpr spaces)
 
 baseFxn :: Maybe String -> Env -> [LispVal] -> [LispVal] -> 
   IOThrowsError LispVal
@@ -331,6 +374,8 @@ eval env (List (Atom "lambda" : DottedList params varargs : body )) =
   varArgFxn varargs env params body
 eval env (List (Atom "lambda" : varargs:(Atom _) : body)) = 
   varArgFxn varargs env [] body
+eval env (List [Atom "load", String fileName]) = 
+  load fileName >>= fmap last . mapM (eval env)
 eval env (List (func@(Atom _): args)) = do
   argsEvaled <- mapM (eval env) args
   funcEvaled <- eval env func
@@ -354,6 +399,7 @@ apply (Func params varags body closure) args =
         Nothing      -> return env
         Just argName -> liftIO $ bindVars env [(argName, List $ starArgs)]
     evalBody env = fmap last $ mapM (eval env) body
+apply (IOFunc func) args = func args 
 -- apply func args = maybe (err) ($ args) $ lookup func primitives
 --   where err = E.throwError $ NotFunction "Unrecognized primitive" func
 
@@ -361,7 +407,17 @@ isBool :: LispVal -> Bool
 isBool (Bool _) = True
 isBool _ = False
 
--- TODO: change typing
+ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
+ioPrimitives = [("apply", applyProc),
+                ("open-input-file", makePort IO.ReadMode),
+                ("open-output-file", makePort IO.WriteMode),
+                ("close-input-port", closePort),
+                ("close-output-port", closePort),
+                ("read", readProc),
+                ("write", writeProc),
+                ("read-contents", readContents),
+                ("read-all", readAll)]
+
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
 primitives = [("+", numericBinop (+)),
               ("-", numericBinop (-)),
@@ -493,7 +549,9 @@ data LispVal = Atom String |
                Complex (Complex Double) |
                PrimitiveFunc ([LispVal] -> ThrowsError LispVal) |
                Func {params :: [String], varag :: (Maybe String),
-                     body :: [LispVal], closure :: Env} 
+                     body :: [LispVal], closure :: Env} |
+               IOFunc ([LispVal] -> IOThrowsError LispVal) |
+               Port IO.Handle
 
 instance Show LispVal where
  show = showVal
@@ -520,6 +578,9 @@ showTemp (DottedList listPart elemPart) = "("
                                          ++ listShowerTemp listPart
                                          ++ "." ++ showTemp elemPart
                                          ++ ")"
+showTemp (Port _)   = "<IO Port>"
+showTemp (IOFunc _) = "<IO primitive>"
+
 
 showVal :: LispVal -> String
 showVal (Atom contents) = contents
@@ -541,6 +602,9 @@ showVal (Func {params=args, varag=varags, body=body, closure=env}) =
     (case varags of
       Nothing -> ""
       Just starArg -> " . " ++ starArg) ++ ") ...)"
+showVal (Port _)   = "<IO Port>"
+showVal (IOFunc _) = "<IO primitive>"
+
 
 listShowerTemp :: [LispVal] -> String
 listShowerTemp = unwords . (map showTemp)

@@ -496,7 +496,7 @@ data LispVal = Atom String |
                      body :: [LispVal], closure :: Env} 
 
 instance Show LispVal where
- show = showVal
+ show = showTemp
 
 {-
 Ch3
@@ -677,3 +677,13 @@ spaces = skipMany1 space
 
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
+
+{-From future-}
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser input = case parse parser "" input of
+  Left err  -> E.throwError $ Parser err 
+  Right val -> return val
+
+readFuture = readOrThrow parseExpr
+
+readExprList = readOrThrow (endBy parseExpr spaces)
