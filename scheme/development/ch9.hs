@@ -146,7 +146,7 @@ readPrompt :: String -> IO String
 readPrompt prompt = flushStr prompt >> getLine
 
 evalString :: Env -> String -> IO String
-evalString env expr = -- TODO: Why is the parenthesis required?
+evalString env expr = 
   runIOThrows $ fmap show $ (liftThrows $ readExpr expr) >>= eval env
 
 evalAndPrint :: Env -> String -> IO ()

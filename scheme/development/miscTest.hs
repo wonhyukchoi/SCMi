@@ -18,6 +18,11 @@ import qualified System.IO as IO
 import qualified Data.IORef as IORef
 import Control.Monad.IO.Class(liftIO)
 
+foo str = do
+  exp <- readExpr str
+  env <- nullEnv
+  env >>= flip eval exp
+
 main :: IO()
 main = do
   args <- getArgs
