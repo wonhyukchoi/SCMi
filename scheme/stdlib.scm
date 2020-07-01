@@ -38,10 +38,22 @@
 (define (and . lst)     (fold && #t lst))
 (define (or . lst)      (fold || #f lst))
 
-(define (max first . rest))
+(define (max first . rest) 
+  (fold (lambda (acc next) (if (> next acc) next acc)) first rest))
+(define (min first . rest) 
+  (fold (lambda (acc next) (if (< next acc) next acc)) first rest))
+
+(define (length lst)  (fold (lambda (x y) (+ x 1)) 0 lst))
+(define (reverse lst) (fold (flip cons) '() lst))
+
+(define (map func lst) 
+  (reduce (lambda (x acc) (cons (func x) acc)) '() lst))
+(define (filter func lst)
+  (reduce
+    (lambda (x acc) (if (func x) (cons x acc) acc))
+    '() lst))
 
 (define (factorial x)
   (if (= x 1)
     1
     (* x (factorial (- x 1)))))
-
