@@ -1,8 +1,5 @@
-# Interpreters and compilers
+# SCMi
 
-Personal implementations of interpreters and compilers of some languages.
+`Haskell`로 쓰여진 `Scheme` 인터프리터.
 
-* [Scheme](https://github.com/wonhyukchoi/languages/blob/master/scheme)
-* [PyPy](https://github.com/wonhyukchoi/languages/blob/master/pypy)
-
-None are designed to be from scratch, or to be comprehensive of the entire language -- that would be a large project and effort. 
+`scheme/`에 있는 사용법을 따라주세요.
