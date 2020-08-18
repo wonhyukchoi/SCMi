@@ -31,13 +31,11 @@ runFile args = do
   let fileName = args !! 0
   env <- primitiveBindings 
   runIOThrows $ fmap show $ eval env $ List [Atom "load", String fileName]
-  -- (runIOThrows $ fmap show $ eval env (List [Atom "load", String fileName]))  >>=
-  --   IO.hPutStrLn IO.stderr
   putStrLn $ "Ok, modules loaded: " ++ fileName
   until_ (readPrompt "$~: ") (evalAndPrint env) (== ":q")
 
 
-runREPL :: IO()
+runREPL :: IO() 
 runREPL = do
   putStrLn "Booting whc Scheme Interpreter... "
   putStrLn "Hello, welcome! "
@@ -79,9 +77,6 @@ load fileName = (liftIO $ IO.readFile fileName) >>=
 readAll :: [LispVal] -> IOThrowsError LispVal
 readAll [String fileName] = fmap List $ load fileName
 
-
-{-Below contains Ch.1~8 and edits here and there-}
-
 type Env = IORef.IORef [(String, IORef.IORef LispVal)]
 
 nullEnv :: IO Env
@@ -105,7 +100,7 @@ getVar :: Env -> String -> IOThrowsError LispVal
 getVar envRef var = do
   env <- liftIO $ IORef.readIORef envRef
   maybe (E.throwError $ UnboundVar "Unbound var" var)
-        (liftIO . IORef.readIORef) -- ??
+        (liftIO . IORef.readIORef)
         (lookup var env)
 
 setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
@@ -137,8 +132,6 @@ bindVars envRef bindings = do
           newEnv <- IORef.newIORef value
           return (var, newEnv)
 
-{-Ch6 below.-}
-
 flushStr :: String -> IO ()
 flushStr str = putStr str >> IO.hFlush IO.stdout
 
@@ -146,7 +139,7 @@ readPrompt :: String -> IO String
 readPrompt prompt = flushStr prompt >> getLine
 
 evalString :: Env -> String -> IO String
-evalString env expr = -- TODO: Why is the parenthesis required?
+evalString env expr = 
   runIOThrows $ fmap show $ (liftThrows $ readExpr expr) >>= eval env
 
 evalAndPrint :: Env -> String -> IO ()
@@ -184,9 +177,6 @@ stringRef badArgList         = E.throwError $ NumArgs 2 badArgList
 data Unpacker = forall a. Eq a => AnyUnpacker (LispVal -> ThrowsError a)
 
 cond :: Env -> [LispVal] -> IOThrowsError LispVal
--- ex) condition ~~ List [Atom "<",Number 3,Number 1]
--- This could benefit from a great deal of refactoring...
--- Also need to implement the "else" clause.
 cond env [List [condition, value]] = do
   ifTrue <- eval env condition
   case ifTrue of
@@ -313,14 +303,11 @@ instance Show LispError where
 
 type ThrowsError = Either LispError
 
--- trapError :: ThrowsError String -> ThrowsError String
 trapError :: (E.MonadError a m, Show a) => m String -> m String
 trapError action = E.catchError action (return . show)
 
 extractValue :: ThrowsError String -> String
 extractValue (Right val) = val
-
-{-Ch3 below-}
 
 readOrThrow :: Parser a -> String -> ThrowsError a
 readOrThrow parser input = case parse parser "" input of
@@ -384,7 +371,6 @@ eval _ badForm = E.throwError $ BadSpecialForm "Syntax Error." badForm
 
 
 apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
--- apply "boolean?" (arg:_)        = return $ Bool $ isBool arg
 apply (PrimitiveFunc func) args = liftThrows $ func args
 apply (Func params varags body closure) args = 
   if len params /= len args && varags == Nothing 
@@ -400,8 +386,6 @@ apply (Func params varags body closure) args =
         Just argName -> liftIO $ bindVars env [(argName, List $ starArgs)]
     evalBody env = fmap last $ mapM (eval env) body
 apply (IOFunc func) args = func args 
--- apply func args = maybe (err) ($ args) $ lookup func primitives
---   where err = E.throwError $ NotFunction "Unrecognized primitive" func
 
 isBool :: LispVal -> Bool
 isBool (Bool _) = True
@@ -429,7 +413,6 @@ primitives = [("+", numericBinop (+)),
               ("number?", unaryOp numberp),
               ("symbol->string", unaryOp sym2str),
               ("string->symbol", unaryOp str2sym),
-              --- Chapter 5
               ("=", numBoolBinop (==)),
               ("<", numBoolBinop (<)),
               (">", numBoolBinop (>)),
@@ -443,7 +426,6 @@ primitives = [("+", numericBinop (+)),
               ("string>?", strBoolBinop (>)),
               ("string<=?", strBoolBinop (<=)),
               ("string>=?", strBoolBinop (>=)),
-              -- Chapter 5 con.
               ("car", car),
               ("cdr", cdr),
               ("cons", cons),
@@ -556,10 +538,6 @@ data LispVal = Atom String |
 instance Show LispVal where
  show = showVal
 
-{-
-Ch3
--}
-
 showTemp :: LispVal -> String
 showTemp (PrimitiveFunc _)                        = show "Primitive Func"
 showTemp (Func params varag body closur)          = "params: " ++ show params ++
@@ -611,10 +589,6 @@ listShowerTemp = unwords . (map showTemp)
 
 listShower :: [LispVal] -> String
 listShower = unwords . (map showVal)
-
-{-
-Imports from ch2
--}
 
 parseNumber :: Parser LispVal
 parseNumber = parseDecimal1
